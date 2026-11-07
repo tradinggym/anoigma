@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Παρακολούθηση Ανοίγματος · Trading Gym</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one dark control screen, summary strip on top, three panels (τιμή/OI/delta), levels + log below */
+:root{
+  --bg:#05070d; --surface:#0d1422; --surface2:#121b2d; --ink:#e8edf4; --muted:#8f9bb0; --line:#1b2536;
+  --accent:#2f8cff; --up:#2ec27e; --down:#e84a5f; --warn:#f0a030;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace; --sans:"IBM Plex Sans",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45}
+body{padding:14px max(16px,env(safe-area-inset-left,0px)) 40px max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.2px}
+.top{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.clock{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.clock b{color:var(--ink);font-weight:500}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer;font:500 13px var(--mono)}
+.tab.on{color:var(--ink);border-color:var(--accent);background:var(--surface2)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,select,input{font:inherit;color:var(--ink);background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+button{cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input{font-family:var(--mono);width:110px}
+label{color:var(--muted);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.card h2{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:600}
+.big{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-variant-numeric:tabular-nums;margin-top:8px}
+.kv div:nth-child(odd){color:var(--muted);font-size:12px}
+.kv div:nth-child(even){font-family:var(--mono);text-align:right}
+.up{color:var(--up)} .down{color:var(--down)} .warn{color:var(--warn)} .muted{color:var(--muted)}
+.verdict{margin-top:12px;padding:12px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface2);font-size:15px}
+.verdict .tag{display:inline-block;font:600 11px var(--mono);letter-spacing:.6px;padding:3px 8px;border-radius:4px;margin-right:8px;vertical-align:middle}
+.tag.cover{background:#2b2f12;color:#e3d85a} .tag.new{background:#2f1a1f;color:#ff8da1} .tag.healthy{background:#12302a;color:#5fe3a8} .tag.flush{background:#1b2a3d;color:#8fc3ff} .tag.flat{background:#1b2536;color:#aab6c9}
+canvas{width:100%;height:120px;display:block;background:var(--bg);border-radius:6px;border:1px solid var(--line);margin-top:8px}
+.lights{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.light{display:flex;align-items:center;gap:6px;font:12px var(--mono);color:var(--muted);padding:4px 8px;border:1px solid var(--line);border-radius:999px}
+.light i{width:9px;height:9px;border-radius:50%;background:#2a3850;display:inline-block}
+.light.on i{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+.light.hit i{background:var(--down);box-shadow:0 0 8px var(--down)}
+.light.ok i{background:var(--up);box-shadow:0 0 8px var(--up)}
+.levels{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:8px}
+.levels label{display:flex;flex-direction:column;gap:4px}
+table{width:100%;border-collapse:collapse;font:12px var(--mono);font-variant-numeric:tabular-nums;margin-top:8px}
+th,td{text-align:right;padding:5px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+th{color:var(--muted);font-weight:500}
+.tablewrap{overflow-x:auto}
+.note{color:var(--muted);font-size:12px;margin-top:8px}
+.err{color:var(--down);font:12px var(--mono);margin-top:6px;min-height:1em}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="top">
+  <div>
+    <h1>Παρακολούθηση Ανοίγματος <span style="color:var(--muted);font-weight:500;font-size:13px">· Trading Gym</span></h1>
+    <div class="clock">Αθήνα <b id="clk">--:--:--</b> · <span id="next">—</span></div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+</div>
+
+<div class="row">
+  <label>Άνοιγμα</label>
+  <select id="sess">
+    <option value="live">LIVE — τελευταία Ν λεπτά (κυλιόμενο)</option>
+    <option value="ny830">ΝΥ δεδομένα 08:30 ET</option>
+    <option value="ny930">ΝΥ μετοχές 09:30 ET</option>
+    <option value="comex">COMEX 08:20 ET</option>
+    <option value="ldn">Λονδίνο 08:00 UK</option>
+    <option value="tok">Τόκιο 09:00 JST</option>
+    <option value="day">Ημέρα Binance (02:00 Ελλάδας)</option>
+    <option value="manual">Χειροκίνητο (από τώρα)</option>
+  </select>
+  <button id="startNow">Έναρξη τώρα</button>
+  <label>Παράθυρο</label>
+  <select id="win"><option value="30">30 λεπτά</option><option value="60" selected>60 λεπτά</option><option value="120">120 λεπτά</option><option value="0">έως τώρα (χωρίς λήξη)</option></select>
+  <label>Διαφορά OANDA (μόνο χρυσός)</label>
+  <input id="offs" value="-8" title="Πόσο διαφέρει το OANDA από το Binance XAUUSDT. Σήμερα το OANDA ήταν περίπου 8$ χαμηλότερα.">
+  <span class="err" id="err"></span>
+</div>
+
+<div class="verdict" id="verdict"><span class="tag flat">ΑΝΑΜΟΝΗ</span><span id="vtext">Φορτώνει δεδομένα Binance…</span></div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Τιμή από το άνοιγμα</h2>
+    <div class="big" id="px">—</div>
+    <div class="kv" id="pxkv"></div>
+    <canvas id="cpx" height="120"></canvas>
+  </div>
+  <div class="card">
+    <h2>Open interest</h2>
+    <div class="big" id="oi">—</div>
+    <div class="kv" id="oikv"></div>
+    <canvas id="coi" height="120"></canvas>
+  </div>
+  <div class="card">
+    <h2>Delta (market buy − market sell, USDT)</h2>
+    <div class="big" id="dl">—</div>
+    <div class="kv" id="dlkv"></div>
+    <canvas id="cdl" height="120"></canvas>
+  </div>
+</div>
+
+<div class="card" style="margin-top:10px">
+  <h2>Επίπεδα ημέρας (τιμή Binance· για χρυσό γράψε τιμές OANDA και μετατρέπονται)</h2>
+  <div class="levels">
+    <label>Ζώνη από <input data-l="z1"></label>
+    <label>Ζώνη έως <input data-l="z2"></label>
+    <label>Trigger <input data-l="tr"></label>
+    <label>Ακύρωση <input data-l="inv"></label>
+    <label>Επίπεδο A (π.χ. PDH) <input data-l="la"></label>
+    <label>Επίπεδο B (π.χ. PDL) <input data-l="lb"></label>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <button id="autoPD">PDH / PDL / PDC από Binance</button>
+    <span class="note" id="lvnote"></span>
+  </div>
+  <div class="lights" id="lights"></div>
+  <h2 style="margin-top:14px">Σαρώσεις επιπέδων (καταγράφονται μόνες τους)</h2>
+  <div class="tablewrap"><table id="swt"><thead><tr><th>Ημ/νία</th><th>Ώρα</th><th>Σύμβολο</th><th>Επίπεδο</th><th>Τιμή</th><th>Κατεύθ.</th><th>Απόρριψη 5'</th><th>OI Δ% (5')</th><th>Delta 3'</th><th>+15'</th><th>+30'</th></tr></thead><tbody></tbody></table></div>
+  <div class="row" style="margin-top:6px"><button id="copySw">Αντιγραφή CSV σαρώσεων</button><span class="note">Σάρωση = 1λ κλείσιμο πέρα από το επίπεδο. Απόρριψη = επιστροφή μέσα σε 5'. +15'/+30' = πού ήταν η τιμή μετά, σε $ από το επίπεδο (θετικό = προς την πλευρά της απόρριψης).</span></div>
+  <div class="note">Φωτάκι πορτοκαλί = η τιμή είναι στη ζώνη. Κόκκινο = πέρασε το επίπεδο (με 1λ κλείσιμο). Πράσινο = σάρωση και απόρριψη: πέρασε το επίπεδο και γύρισε μέσα σε 5 λεπτά. Το κλείσιμο 15λ δεν υπολογίζεται εδώ — αυτό είναι το σημείο της σύγκρισης.</div>
+</div>
+
+<div class="card" style="margin-top:10px">
+  <h2>Καταγραφή ανοιγμάτων</h2>
+  <div class="row">
+    <button id="logNow" class="primary">Καταγραφή τώρα</button>
+    <button id="copyCsv">Αντιγραφή CSV</button>
+    <button id="clearLog">Καθαρισμός</button>
+    <span class="note">Αυτόματη καταγραφή στα 30 λεπτά από το άνοιγμα. Τα δεδομένα μένουν σε αυτόν τον browser.</span>
+  </div>
+  <div class="tablewrap"><table id="logt"><thead><tr><th>Ημ/νία</th><th>Άνοιγμα</th><th>Σύμβολο</th><th>Τιμή αν.</th><th>Τιμή +30'</th><th>High</th><th>Low</th><th>OI Δ%</th><th>Delta</th><th>L/S</th><th>Ανάγνωση</th></tr></thead><tbody></tbody></table></div>
+</div>
+
+<div class="note">Δεδομένα: Binance USDT-M futures (fapi), ανανέωση κάθε 10"· delta = 2·takerBuyQuote − quoteVolume ανά 1λ κερί· OI ιστορικό ανά 5λ. Χρυσός = XAUUSDT (όχι OANDA). Εργαλείο ανάγνωσης, όχι σημάτων.</div>
+<footer style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px">
+  <div style="color:var(--ink);font-weight:600">Trading Gym · Παρακολούθηση Ανοίγματος v1.5</div>
+  <div>Ζωντανή ανάγνωση του ανοίγματος για XAU, BTC, ETH, SOL και XRP: εύρος 5/15/30', open interest σε φάσεις (κάλυψη shorts / νέα shorts / νέα longs / καθάρισμα), delta, θέσεις λογαριασμών και σαρώσεις επιπέδων. Για κίνηση γύρω από είδηση διάβασε το «LIVE 30'» — η «Ημέρα» ομαδοποιεί ανά ώρα.</div>
+  <div style="margin-top:6px;color:var(--warn)">Εκπαιδευτικό υλικό — όχι επενδυτική συμβουλή.</div>
+</footer>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const SYMS=['XAUUSDT','BTCUSDT','ETHUSDT','SOLUSDT','XRPUSDT'];
+const DEC={XAUUSDT:2,BTCUSDT:0,ETHUSDT:2,SOLUSDT:3,XRPUSDT:4};const dp=sym=>DEC[sym]??3;
+const API='https://fapi.binance.com';
+const S={sym:localStorage.getItem('om.sym')||'XAUUSDT', open:null, manual:null, data:{}, log:[]};
+try{S.log=JSON.parse(localStorage.getItem('om.log')||'[]')}catch(e){S.log=[]}
+
+// ---------- tabs
+const tabs=$('#tabs');
+SYMS.forEach(s=>{const b=document.createElement('button');b.className='tab'+(s===S.sym?' on':'');b.textContent=s.replace('USDT','');b.onclick=()=>{S.sym=s;localStorage.setItem('om.sym',s);[...tabs.children].forEach(c=>c.classList.toggle('on',c.textContent===s.replace('USDT','')));loadLevels();tick(true)};tabs.appendChild(b)});
+
+// ---------- time helpers
+const fmt=(d,tz,o)=>new Intl.DateTimeFormat('el-GR',Object.assign({timeZone:tz},o)).format(d);
+function partsIn(d,tz){const p=new Intl.DateTimeFormat('en-GB',{timeZone:tz,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}).formatToParts(d);const o={};p.forEach(x=>o[x.type]=x.value);return o}
+// timestamp of today's HH:MM in a timezone (or yesterday's if it is still in the future and back=true)
+function tsAt(tz,h,m,ref){ref=ref||new Date();const p=partsIn(ref,tz);let guess=Date.UTC(+p.year,+p.month-1,+p.day,h,m,0);
+  // correct for tz offset: find offset of guess in tz
+  const q=partsIn(new Date(guess),tz);const local=Date.UTC(+q.year,+q.month-1,+q.day,+q.hour,+q.minute,+q.second);const off=local-guess;return guess-off}
+const SESS={ny830:['America/New_York',8,30],ny930:['America/New_York',9,30],comex:['America/New_York',8,20],ldn:['Europe/London',8,0],tok:['Asia/Tokyo',9,0]};
+const isLive=()=>$('#sess').value==='live';
+function openTs(){const v=$('#sess').value;if(v==='live')return Math.floor((Date.now()-((+$('#win').value)||60)*60000)/60000)*60000;if(v==='day'){const d=new Date();return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())}if(v==='manual')return S.manual;const [tz,h,m]=SESS[v];let t=tsAt(tz,h,m);if(t>Date.now())t-=86400000;return t}
+function nextOpenTs(){const v=$('#sess').value;if(v==='manual'||v==='live')return null;if(v==='day')return openTs()+86400000;const [tz,h,m]=SESS[v];let t=tsAt(tz,h,m);if(t<=Date.now())t+=86400000;return t}
+$('#startNow').onclick=()=>{S.manual=Date.now();$('#sess').value='manual';localStorage.setItem('om.sess','manual');tick(true)};
+$('#sess').onchange=()=>{localStorage.setItem('om.sess',$('#sess').value);tick(true)};
+{const sv=localStorage.getItem('om.sess');if(sv&&sv!=='manual'&&[...$('#sess').options].some(o=>o.value===sv))$('#sess').value=sv}
+$('#win').onchange=()=>{localStorage.setItem('om.win',$('#win').value);tick(true)};
+{const wv=localStorage.getItem('om.win');if(wv!=null&&[...$('#win').options].some(o=>o.value===wv))$('#win').value=wv}
+$('#offs').onchange=()=>{localStorage.setItem('om.offs',$('#offs').value);render()};
+$('#offs').value=localStorage.getItem('om.offs')||'-8';
+
+setInterval(()=>{const n=new Date();$('#clk').textContent=fmt(n,'Europe/Athens',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  const o=openTs(),nx=nextOpenTs();let s='';
+  if(isLive()){s+='LIVE · κυλιόμενο παράθυρο από '+fmt(new Date(o),'Europe/Athens',{hour:'2-digit',minute:'2-digit',hour12:false})+' (τελευταία '+((+$('#win').value)||60)+' λεπτά)';}
+  else if(o){const mins=Math.floor((Date.now()-o)/60000);s+='άνοιγμα '+fmt(new Date(o),'Europe/Athens',{hour:'2-digit',minute:'2-digit',hour12:false})+' ('+(mins<0?'σε '+(-mins):mins)+' λεπτά)';}
+  if(nx){const dm=Math.floor((nx-Date.now())/60000);s+=(s?' · ':'')+'επόμενο σε '+Math.floor(dm/60)+'ω '+(dm%60)+'λ'}
+  $('#next').textContent=s||'—'},1000);
+
+// ---------- levels (per symbol, localStorage)
+const LV=['z1','z2','tr','inv','la','lb'];
+function loadLevels(){let o={};try{o=JSON.parse(localStorage.getItem('om.lv.'+S.sym)||'{}')}catch(e){}LV.forEach(k=>{$('[data-l="'+k+'"]').value=o[k]||''})}
+document.querySelectorAll('[data-l]').forEach(i=>i.addEventListener('change',()=>{const o={};LV.forEach(k=>o[k]=$('[data-l="'+k+'"]').value);localStorage.setItem('om.lv.'+S.sym,JSON.stringify(o));render()}));
+loadLevels();
+function lvl(k){const v=parseFloat(($('[data-l="'+k+'"]').value||'').replace(',','.'));if(isNaN(v))return null;if(S.sym==='XAUUSDT'){const off=parseFloat($('#offs').value)||0;return v-off}return v} // OANDA → Binance
+
+// ---------- fetch
+const g=async(u)=>{const r=await fetch(API+u);if(!r.ok)throw new Error(r.status+' '+u);return r.json()};
+async function fetchAll(){
+  const sym=S.sym,o=openTs();if(!o){throw new Error('Διάλεξε άνοιγμα ή πάτα «Έναρξη τώρα»')}
+  const win=+$('#win').value;
+  const since=o-5*60000; // 5' πριν το άνοιγμα για αναφορά
+  const limit=Math.min(1500,Math.ceil((Date.now()-since)/60000)+2);
+  const [kl,oi,oih,ls,top,tk,pr]=await Promise.all([
+    g(`/fapi/v1/klines?symbol=${sym}&interval=1m&startTime=${since}&limit=${limit}`),
+    g(`/fapi/v1/openInterest?symbol=${sym}`),
+    g(`/futures/data/openInterestHist?symbol=${sym}&period=5m&limit=${Math.min(500,Math.ceil((Date.now()-since)/300000)+3)}`),
+    g(`/futures/data/globalLongShortAccountRatio?symbol=${sym}&period=5m&limit=2`),
+    g(`/futures/data/topLongShortPositionRatio?symbol=${sym}&period=5m&limit=2`),
+    g(`/futures/data/takerlongshortRatio?symbol=${sym}&period=5m&limit=3`),
+    g(`/fapi/v1/premiumIndex?symbol=${sym}`)
+  ]);
+  const bars=kl.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],q:+x[7],tb:+x[10]})).map(b=>Object.assign(b,{d:2*b.tb-b.q}));
+  S.data={sym,o,win,end:win>0?o+win*60000:8.64e15,live:isLive(),bars,oi:+oi.openInterest,oih:oih.map(x=>({t:x.timestamp,v:+x.sumOpenInterest})),ls:ls.map(x=>+x.longAccount),top:top.map(x=>+x.longAccount),tk:tk.map(x=>+x.buySellRatio),mark:+pr.markPrice,fund:+pr.lastFundingRate,at:Date.now()};
+}
+
+// ---------- compute
+function stats(){
+  const D=S.data;if(!D.bars)return null;const o=D.o;
+  const inWin=D.bars.filter(b=>b.t>=o&&b.t<D.end);
+  const pre=D.bars.filter(b=>b.t<o);
+  const openPx=inWin.length?inWin[0].o:(pre.length?pre[pre.length-1].c:D.mark);
+  const last=D.bars[D.bars.length-1];
+  const hi=inWin.length?Math.max(...inWin.map(b=>b.h)):null, lo=inWin.length?Math.min(...inWin.map(b=>b.l)):null;
+  const rng=n=>{const s=inWin.filter(b=>b.t<o+n*60000);return s.length?[Math.min(...s.map(b=>b.l)),Math.max(...s.map(b=>b.h))]:null};
+  const cum=[];let acc=0;inWin.forEach(b=>{acc+=b.d;cum.push(acc)});
+  const oiAtOpen=(()=>{let best=null;D.oih.forEach(x=>{if(x.t<=o+60000&&(!best||x.t>best.t))best=x});return best?best.v:(D.oih[0]?D.oih[0].v:null)})();
+  const ended=!D.live&&D.win>0&&Date.now()>D.end&&inWin.length;
+  const endBar=ended?inWin[inWin.length-1]:last;
+  const oiAt=t=>{let best=null;D.oih.forEach(x=>{if(x.t<=t+60000&&(!best||x.t>best.t))best=x});return best?best.v:(D.oih[0]?D.oih[0].v:null)};
+  const oiNow=ended?(oiAt(endBar.t)||D.oi):D.oi;const oiD=oiAtOpen?(oiNow-oiAtOpen)/oiAtOpen*100:null;
+  const pxD=(endBar.c-openPx)/openPx*100;
+  // τελευταία 15' του παραθύρου
+  const seg=inWin.slice(-15);const segPx=seg.length>1?(seg[seg.length-1].c-seg[0].o)/seg[0].o*100:null;
+  const oiSeg0=seg.length?oiAt(seg[0].t-300000):null;const oiSegD=(oiSeg0&&oiNow)?(oiNow-oiSeg0)/oiSeg0*100:null;const segDelta=seg.reduce((a,b)=>a+b.d,0);
+  return {openPx,last:endBar.c,now:last.c,ended,hi,lo,r5:rng(5),r15:rng(15),r30:rng(30),cum,delta:acc,oiAtOpen,oiNow,oiD,pxD,inWin,mins:inWin.length,segPx,oiSegD,segDelta,segN:seg.length};
+}
+function classify(p,oi,d){
+  if(oi==null)return ['flat','ΧΩΡΙΣ OI','δεν βρέθηκε OI'];
+  const big=Math.abs(p)>=0.25;
+  if(p>0&&oi<-0.3)return ['cover','ΚΑΛΥΨΗ SHORTS','τιμή πάνω, OI κάτω '+oi.toFixed(2)+'%: κλείνουν shorts, όχι νέοι αγοραστές — συχνά βραχύβιο'];
+  if(p<0&&oi<-0.3)return ['flush','ΚΑΘΑΡΙΣΜΑ LONGS','τιμή κάτω, OI κάτω '+oi.toFixed(2)+'%: κλείνουν longs (stops/liquidations) — αν ανακτήσει γρήγορα, συχνά πάτος'];
+  if(p>0&&oi>0.3)return ['new',big?'ΑΝΟΔΟΣ ΜΕ ΔΑΝΕΙΚΑ':'ΝΕΕΣ ΘΕΣΕΙΣ ΠΑΝΩ','τιμή πάνω, OI πάνω +'+oi.toFixed(2)+'%'+(d>0?', αγοραστές market (delta +)':', χωρίς delta — εύθραυστο')];
+  if(p<0&&oi>0.3)return ['new','ΝΕΕΣ ΘΕΣΕΙΣ ΣΤΗΝ ΠΤΩΣΗ','τιμή κάτω, OI πάνω +'+oi.toFixed(2)+'%: νέα shorts ή αγορά βουτιάς με μόχλευση — ρίσκο ντόμινο'];
+  if(Math.abs(p)<0.1&&Math.abs(oi)<0.3)return ['flat','ΙΣΟΡΡΟΠΙΑ','τιμή και OI αμετάβλητα: κανείς δεν δεσμεύεται'];
+  return ['healthy',p>0?'ΑΝΟΔΟΣ ΧΩΡΙΣ ΜΟΧΛΕΥΣΗ':'ΠΤΩΣΗ ΧΩΡΙΣ ΜΟΧΛΕΥΣΗ','OI σταθερό ('+oi.toFixed(2)+'%): αλλαγή χεριών, όχι νέα μόχλευση — delta '+(d>0?'+':'')+(d/1e6).toFixed(1)+' εκ.'];
+}
+function reading(st){
+  if(!st||st.mins<2)return ['flat','ΑΝΑΜΟΝΗ','Λιγότερα από 2 λεπτά από το άνοιγμα — δεν υπάρχει ανάγνωση ακόμη.'];
+  return classify(st.pxD,st.oiD,st.delta);
+}
+
+// ---------- render
+const nf=(v,d)=>v==null?'—':v.toLocaleString('el-GR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const pct=v=>v==null?'—':(v>0?'+':'')+v.toFixed(2)+'%';
+const cls=v=>v>0?'up':v<0?'down':'';
+function render(){
+  const st=stats();if(!st)return;const D=S.data;const dec=dp(S.sym);
+  const off=S.sym==='XAUUSDT'?(parseFloat($('#offs').value)||0):0;
+  $('#px').innerHTML=nf(st.last,dec)+' <span class="'+cls(st.pxD)+'" style="font-size:16px">'+pct(st.pxD)+'</span>'+(off?' <span class="muted" style="font-size:13px">OANDA≈'+nf(st.last+off,dec)+'</span>':'')+(st.ended?' <span class="muted" style="font-size:12px">· τέλος παραθύρου · τώρα '+nf(st.now,dec)+'</span>':'');
+  $('#pxkv').innerHTML=[['Άνοιγμα',nf(st.openPx,dec)],['High / Low',nf(st.hi,dec)+' / '+nf(st.lo,dec)],['Εύρος 5\'',st.r5?nf(st.r5[0],dec)+'–'+nf(st.r5[1],dec):'—'],['Εύρος 15\'',st.r15?nf(st.r15[0],dec)+'–'+nf(st.r15[1],dec):'—'],['Εύρος 30\'',st.r30?nf(st.r30[0],dec)+'–'+nf(st.r30[1],dec):'—'],['Mark / funding',nf(D.mark,dec)+' / '+(D.fund*100).toFixed(4)+'%']].map(x=>'<div>'+x[0]+'</div><div>'+x[1]+'</div>').join('');
+  $('#oi').innerHTML=nf(st.oiNow,0)+' <span class="'+cls(st.oiD)+'" style="font-size:16px">'+pct(st.oiD)+'</span>';
+  $('#oikv').innerHTML=[['OI στο άνοιγμα',nf(st.oiAtOpen,0)],['Μεταβολή (συμβόλαια)',st.oiAtOpen?nf(st.oiNow-st.oiAtOpen,0):'—'],['Λογαριασμοί long',D.ls[D.ls.length-1]!=null?(D.ls[D.ls.length-1]*100).toFixed(1)+'%':'—'],['Top traders long',D.top[D.top.length-1]!=null?(D.top[D.top.length-1]*100).toFixed(1)+'%':'—'],['Taker buy/sell (5\')',D.tk.map(x=>x.toFixed(2)).join(' → ')]].map(x=>'<div>'+x[0]+'</div><div>'+x[1]+'</div>').join('');
+  $('#dl').innerHTML='<span class="'+cls(st.delta)+'">'+(st.delta>0?'+':'')+nf(st.delta/1e6,2)+' εκ.</span>';
+  const last5=st.inWin.slice(-5).reduce((a,b)=>a+b.d,0);const first5=st.inWin.slice(0,5).reduce((a,b)=>a+b.d,0);
+  $('#dlkv').innerHTML=[['Πρώτα 5\'',(first5>0?'+':'')+nf(first5/1e6,2)+' εκ.'],['Τελευταία 5\'',(last5>0?'+':'')+nf(last5/1e6,2)+' εκ.'],['Λεπτά στο παράθυρο',st.mins+' / '+(D.win||'∞')],['Ώρα δεδομένων',fmt(new Date(D.at),'Europe/Athens',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})]].map(x=>'<div>'+x[0]+'</div><div>'+x[1]+'</div>').join('');
+  const [k,t,txt]=reading(st);let v='<div><span class="muted" style="font:600 11px var(--mono);letter-spacing:.6px">ΣΥΝΟΛΟ '+st.mins+'\'</span> <span class="tag '+k+'">'+t+'</span><span>'+txt+'</span></div>';
+  if(st.segN>=5&&st.segPx!=null){const [k2,t2,x2]=classify(st.segPx,st.oiSegD,st.segDelta);v+='<div style="margin-top:8px"><span class="muted" style="font:600 11px var(--mono);letter-spacing:.6px">ΤΕΛΕΥΤΑΙΑ '+st.segN+'\'</span> <span class="tag '+k2+'">'+t2+'</span><span>'+x2+'</span></div>'}
+  const ph=phases(st);if(ph.length)v+='<div style="margin-top:8px"><span class="muted" style="font:600 11px var(--mono);letter-spacing:.6px">ΦΑΣΕΙΣ</span> '+ph.map(p=>'<span class="tag '+p.k+'">'+p.n+'</span><span class="muted" style="font:12px var(--mono)">'+p.a+'–'+p.b+' · τιμή '+(p.dp>0?'+':'')+p.dp.toFixed(2)+'% · OI '+(p.doi>0?'+':'')+p.doi.toFixed(2)+'%</span>').join(' <span class="muted">→</span> ')+'</div>';
+  $('#verdict').innerHTML=v;
+  drawLine($('#cpx'),st.inWin.map(b=>b.c),st.openPx,[lvl('z1'),lvl('z2'),lvl('tr'),lvl('inv'),lvl('la'),lvl('lb')]);
+  const oiPts=D.oih.filter(x=>x.t>=D.o-300000&&(!st.ended||x.t<=D.end+300000));const pxAt=t=>{let b=null;D.bars.forEach(x=>{if(x.t<=t+300000)b=x});return b?b.c:null};
+  drawOI($('#coi'),oiPts.map(x=>x.v),oiPts.map(x=>pxAt(x.t)),st.oiAtOpen);
+  drawBars($('#cdl'),st.inWin.map(b=>b.d),st.cum);
+  renderLights(st);renderLog();
+}
+function drawLine(cv,arr,ref,levels){const ctx=cv.getContext('2d');const W=cv.width=cv.clientWidth*2,H=cv.height=240;ctx.clearRect(0,0,W,H);if(!arr.length)return;
+  const all=arr.concat(ref!=null?[ref]:[],levels.filter(x=>x!=null));let mn=Math.min(...all),mx=Math.max(...all);if(mx===mn){mx+=1;mn-=1}const pad=(mx-mn)*0.08;mn-=pad;mx+=pad;
+  const y=v=>H-(v-mn)/(mx-mn)*H, x=i=>arr.length>1?i/(arr.length-1)*W:W/2;
+  ctx.lineWidth=2;const colors=['#f0a030','#f0a030','#2ec27e','#e84a5f','#8f9bb0','#8f9bb0'];
+  levels.forEach((lv,i)=>{if(lv==null)return;ctx.strokeStyle=colors[i];ctx.setLineDash([6,6]);ctx.beginPath();ctx.moveTo(0,y(lv));ctx.lineTo(W,y(lv));ctx.stroke()});ctx.setLineDash([]);
+  if(ref!=null){ctx.strokeStyle='#3a4a66';ctx.beginPath();ctx.moveTo(0,y(ref));ctx.lineTo(W,y(ref));ctx.stroke()}
+  ctx.strokeStyle='#2f8cff';ctx.lineWidth=3;ctx.beginPath();arr.forEach((v,i)=>{i?ctx.lineTo(x(i),y(v)):ctx.moveTo(x(i),y(v))});ctx.stroke();
+  ctx.fillStyle='#2f8cff';ctx.beginPath();ctx.arc(x(arr.length-1),y(arr[arr.length-1]),6,0,7);ctx.fill();
+  ctx.fillStyle='#8f9bb0';ctx.font='22px IBM Plex Mono, monospace';ctx.fillText(mx.toLocaleString('el-GR',{maximumFractionDigits:2}),8,26);ctx.fillText(mn.toLocaleString('el-GR',{maximumFractionDigits:2}),8,H-10);}
+function drawOI(cv,arr,px,ref){const ctx=cv.getContext('2d');const W=cv.width=cv.clientWidth*2,H=cv.height=240;ctx.clearRect(0,0,W,H);if(arr.length<2)return;
+  const all=arr.concat(ref!=null?[ref]:[]);let mn=Math.min(...all),mx=Math.max(...all);if(mx===mn){mx+=1;mn-=1}const pad=(mx-mn)*0.1;mn-=pad;mx+=pad;
+  const y=v=>H-(v-mn)/(mx-mn)*H, x=i=>i/(arr.length-1)*W;
+  if(ref!=null){ctx.strokeStyle='#3a4a66';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,y(ref));ctx.lineTo(W,y(ref));ctx.stroke()}
+  ctx.lineWidth=4;
+  const B=arr.length>37?12:1;
+  for(let i=1;i<arr.length;i++){const a0=B>1?Math.floor((i-1)/B)*B:i-1,a1=B>1?Math.min(a0+B,arr.length-1):i;const dOI=arr[a1]-arr[a0];const dP=(px[a1]!=null&&px[a0]!=null)?px[a1]-px[a0]:0;const eps=Math.abs(arr[a0])*0.0005*(B>1?3:1);
+    let c='#8f9bb0';if(Math.abs(dOI)>eps){if(dP>0&&dOI<0)c='#e3d85a';else if(dP<0&&dOI>0)c='#ff6b7f';else if(dP>0&&dOI>0)c='#2ec27e';else if(dP<0&&dOI<0)c='#8fc3ff'}
+    ctx.strokeStyle=c;ctx.beginPath();ctx.moveTo(x(i-1),y(arr[i-1]));ctx.lineTo(x(i),y(arr[i]));ctx.stroke()}
+  ctx.fillStyle='#2f8cff';ctx.beginPath();ctx.arc(x(arr.length-1),y(arr[arr.length-1]),6,0,7);ctx.fill();
+  ctx.fillStyle='#8f9bb0';ctx.font='20px IBM Plex Mono, monospace';ctx.fillText(mx.toLocaleString('el-GR',{maximumFractionDigits:0}),8,24);ctx.fillText(mn.toLocaleString('el-GR',{maximumFractionDigits:0}),8,H-8);
+  const leg=[['#e3d85a','κάλυψη'],['#ff6b7f','νέα shorts'],['#2ec27e','νέα longs'],['#8fc3ff','καθάρισμα']];let lx=W-8;ctx.textAlign='right';leg.reverse().forEach(([c,n])=>{ctx.fillStyle=c;ctx.fillText(n,lx,24);lx-=ctx.measureText(n).width+18});ctx.textAlign='left';}
+function drawBars(cv,arr,cum){const ctx=cv.getContext('2d');const W=cv.width=cv.clientWidth*2,H=cv.height=240;ctx.clearRect(0,0,W,H);if(!arr.length)return;
+  const m=Math.max(1,...arr.map(Math.abs));const bw=W/arr.length;const mid=H*0.6;
+  arr.forEach((v,i)=>{ctx.fillStyle=v>=0?'#2ec27e':'#e84a5f';const h=Math.abs(v)/m*(H*0.38);ctx.fillRect(i*bw+1,v>=0?mid-h:mid,Math.max(1,bw-2),h)});
+  const cm=Math.max(1,...cum.map(Math.abs));ctx.strokeStyle='#e8edf4';ctx.lineWidth=2;ctx.beginPath();cum.forEach((v,i)=>{const yy=mid-v/cm*(H*0.38);i?ctx.lineTo(i*bw+bw/2,yy):ctx.moveTo(i*bw+bw/2,yy)});ctx.stroke();
+  ctx.fillStyle='#8f9bb0';ctx.font='22px IBM Plex Mono, monospace';ctx.fillText('λευκή = αθροιστικό',8,26);}
+// ---------- φάσεις: τμήματα 5λ με σταθερό ζεύγος (τιμή, OI), συγχωνευμένα
+function phases(st){const D=S.data;let pts=D.oih.filter(x=>x.t>=D.o-60000&&x.t<=D.end+60000);if(pts.length<3)return [];
+  // μεγάλο παράθυρο (>3 ώρες): ομαδοποίηση ανά 1 ώρα ώστε οι φάσεις να διαβάζονται
+  const longWin=pts[pts.length-1].t-pts[0].t>3*3600000;if(longWin){const L=pts.length-1;pts=pts.filter((_,i)=>(L-i)%12===0)}
+  const pxAt=t=>{let b=null;D.bars.forEach(x=>{if(x.t<=t+300000)b=x});return b?b.c:null};
+  const segs=[];for(let i=1;i<pts.length;i++){const p0=pxAt(pts[i-1].t),p1=pxAt(pts[i].t);if(p0==null||p1==null)continue;const dp=(p1-p0)/p0*100,doi=(pts[i].v-pts[i-1].v)/pts[i-1].v*100;
+    let k='flat',n='ισορροπία';if(Math.abs(doi)>=0.05||Math.abs(dp)>=0.08){if(dp>0&&doi<-0.05){k='cover';n='κάλυψη shorts'}else if(dp<0&&doi>0.05){k='new';n='νέα shorts'}else if(dp>0&&doi>0.05){k='new';n='νέα longs'}else if(dp<0&&doi<-0.05){k='flush';n='καθάρισμα longs'}else{k='healthy';n=dp>0?'άνοδος χωρίς μόχλευση':'πτώση χωρίς μόχλευση'}}
+    const last=segs[segs.length-1];if(last&&last.n===n){last.b=pts[i].t;last.dp+=dp;last.doi+=doi}else segs.push({k,n,a:pts[i-1].t,b:pts[i].t,dp,doi})}
+  // πέτα μικρές φάσεις (10' · 30' αν το παράθυρο ξεπερνά 3 ώρες) εκτός αν είναι η τελευταία
+  const minLen=longWin?0:600000;const out=segs.filter((s,i)=>s.b-s.a>=minLen||i===segs.length-1);
+  return out.map(s=>({k:s.k,n:s.n,dp:s.dp,doi:s.doi,a:fmt(new Date(s.a),'Europe/Athens',{hour:'2-digit',minute:'2-digit',hour12:false}),b:fmt(new Date(s.b),'Europe/Athens',{hour:'2-digit',minute:'2-digit',hour12:false})}));}
+
+// ---------- σαρώσεις επιπέδων: ανίχνευση + αυτόματη καταγραφή
+let SW=[];try{SW=JSON.parse(localStorage.getItem('om.sw')||'[]')}catch(e){SW=[]}
+function oiAtT(t){let best=null;S.data.oih.forEach(x=>{if(x.t<=t+60000&&(!best||x.t>best.t))best=x});return best?best.v:null}
+function detectSweeps(bars){const ev=[];[['Trigger','tr'],['Ακύρωση','inv'],['A','la'],['B','lb'],['Ζώνη από','z1'],['Ζώνη έως','z2']].forEach(([n,k])=>{const v=lvl(k);if(v==null)return;
+  for(let i=1;i<bars.length;i++){const prev=bars[i-1],b=bars[i];const up=prev.c<v&&b.c>v,dn=prev.c>v&&b.c<v;if(!up&&!dn)continue;
+    const back=bars.slice(i+1,i+6).some(x=>up?x.c<v:x.c>v);const after=m=>{const x=bars.find(y=>y.t>=b.t+m*60000);return x?x.c:null};
+    const oi0=oiAtT(b.t-300000),oi1=oiAtT(b.t);const d3=bars.slice(i,i+3).reduce((a,x)=>a+x.d,0);
+    ev.push({key:(S.data.live?'live':S.data.o)+'|'+S.sym+'|'+k+'|'+b.t,sym:S.sym,lv:n,v,t:b.t,px:b.c,dir:up?'↑':'↓',rej:back,oi:(oi0&&oi1)?(oi1-oi0)/oi0*100:null,d3,p15:after(15),p30:after(30),open:S.data.o})}});return ev}
+function renderLights(st){const el=$('#lights');const bars=st.inWin.length?st.inWin:S.data.bars.slice(-1);const last=bars[bars.length-1];if(!last){el.innerHTML='';return}const items=[];
+  const z1=lvl('z1'),z2=lvl('z2');if(z1!=null&&z2!=null){const inZ=last.c>=Math.min(z1,z2)&&last.c<=Math.max(z1,z2);items.push(['Ζώνη',inZ?'on':''])}
+  const ev=detectSweeps(bars);
+  [['Trigger','tr'],['Ακύρωση','inv'],['A','la'],['B','lb']].forEach(([n,k])=>{const v=lvl(k);if(v==null)return;const mine=ev.filter(e=>e.lv===n);const lastE=mine[mine.length-1];
+    items.push([n+' '+v.toLocaleString('el-GR',{maximumFractionDigits:3})+(lastE?' '+fmt(new Date(lastE.t),'Europe/Athens',{hour:'2-digit',minute:'2-digit',hour12:false}):''),lastE?(lastE.rej?'ok':'hit'):''])});
+  el.innerHTML=items.map(([n,s])=>'<span class="light '+s+'"><i></i>'+n+'</span>').join('')||'<span class="note">Γράψε επίπεδα ή πάτα τα κουμπιά για να ανάψουν τα φωτάκια.</span>';
+  // καταγραφή / ενημέρωση σαρώσεων
+  let changed=false;ev.forEach(e=>{const i=SW.findIndex(x=>x.key===e.key);if(i<0){if(SW.some(x=>x.sym===e.sym&&x.lv===e.lv&&x.v===e.v&&x.dir===e.dir&&Math.abs(x.t-e.t)<1800000))return;SW.unshift(e);changed=true}else{const o=SW[i];if(o.p15==null&&e.p15!=null||o.p30==null&&e.p30!=null||o.rej!==e.rej){SW[i]=Object.assign(o,{p15:e.p15,p30:e.p30,rej:e.rej});changed=true}}});
+  if(changed){SW=SW.slice(0,500);localStorage.setItem('om.sw',JSON.stringify(SW));}renderSweeps()}
+function renderSweeps(){const tb=$('#swt tbody');const dir=(e,p)=>p==null?'—':((e.dir==='↑'?-1:1)*(p-e.v)).toFixed(dp(e.sym));
+  tb.innerHTML=SW.slice(0,40).map(e=>'<tr><td>'+fmt(new Date(e.t),'Europe/Athens',{day:'2-digit',month:'2-digit'})+'</td><td>'+fmt(new Date(e.t),'Europe/Athens',{hour:'2-digit',minute:'2-digit',hour12:false})+'</td><td>'+e.sym.replace('USDT','')+'</td><td>'+e.lv+' '+e.v.toLocaleString('el-GR',{maximumFractionDigits:3})+'</td><td>'+nf(e.px,dp(e.sym))+'</td><td>'+e.dir+'</td><td class="'+(e.rej?'up':'down')+'">'+(e.rej?'ναι':'όχι')+'</td><td class="'+cls(e.oi)+'">'+pct(e.oi)+'</td><td class="'+cls(e.d3)+'">'+nf(e.d3/1e6,2)+'</td><td>'+dir(e,e.p15)+'</td><td>'+dir(e,e.p30)+'</td></tr>').join('')}
+$('#copySw').onclick=async()=>{const csv=['Ημ/νία;Ώρα;Σύμβολο;Επίπεδο;Τιμή επιπέδου;Τιμή σάρωσης;Κατεύθυνση;Απόρριψη;OI Δ% 5;Delta 3;+15;+30'].concat(SW.map(e=>[fmt(new Date(e.t),'Europe/Athens',{day:'2-digit',month:'2-digit'}),fmt(new Date(e.t),'Europe/Athens',{hour:'2-digit',minute:'2-digit',hour12:false}),e.sym,e.lv,e.v,e.px,e.dir,e.rej?1:0,e.oi==null?'':e.oi.toFixed(2),Math.round(e.d3),e.p15==null?'':e.p15,e.p30==null?'':e.p30].join(';'))).join('\n');try{await navigator.clipboard.writeText(csv);$('#copySw').textContent='Αντιγράφηκε';setTimeout(()=>$('#copySw').textContent='Αντιγραφή CSV σαρώσεων',1500)}catch(e){prompt('Αντέγραψε:',csv)}};
+
+// ---------- αυτόματα επίπεδα
+function setLv(k,v){const dec=dp(S.sym);$('[data-l="'+k+'"]').value=v==null?'':(+v).toFixed(dec)}
+function saveLv(){const o={};LV.forEach(k=>o[k]=$('[data-l="'+k+'"]').value);localStorage.setItem('om.lv.'+S.sym,JSON.stringify(o))}
+$('#autoPD').onclick=async()=>{try{const k=await g(`/fapi/v1/klines?symbol=${S.sym}&interval=1d&limit=2`);const y=k[0];const off=S.sym==='XAUUSDT'?(parseFloat($('#offs').value)||0):0;setLv('la',+y[2]+off);setLv('lb',+y[3]+off);saveLv();$('#lvnote').textContent='PDH '+(+y[2]+off).toFixed(2)+' · PDL '+(+y[3]+off).toFixed(2)+' · PDC '+(+y[4]+off).toFixed(2)+(off?' (σε τιμές OANDA με διαφορά '+off+')':'')+' — χθεσινό κερί Binance (UTC)';render()}catch(e){$('#lvnote').textContent='Σφάλμα Binance: '+e.message}};
+
+// ---------- log
+function logRow(auto){const st=stats();if(!st)return;const D=S.data;const [,t]=reading(st);
+  const row={d:fmt(new Date(D.o),'Europe/Athens',{day:'2-digit',month:'2-digit'}),s:$('#sess').options[$('#sess').selectedIndex].text,sym:S.sym,o:st.openPx,p:st.last,h:st.hi,l:st.lo,oi:st.oiD,dl:st.delta,ls:D.ls[D.ls.length-1],r:t,k:D.o+'|'+S.sym+'|'+(auto?'auto':Date.now())};
+  if(auto&&S.log.some(x=>x.k===row.k))return;S.log.unshift(row);S.log=S.log.slice(0,300);localStorage.setItem('om.log',JSON.stringify(S.log));renderLog()}
+function renderLog(){const tb=$('#logt tbody');tb.innerHTML=S.log.map(r=>'<tr><td>'+r.d+'</td><td>'+r.s+'</td><td>'+r.sym.replace('USDT','')+'</td><td>'+nf(r.o,dp(r.sym))+'</td><td>'+nf(r.p,dp(r.sym))+'</td><td>'+nf(r.h,dp(r.sym))+'</td><td>'+nf(r.l,dp(r.sym))+'</td><td class="'+cls(r.oi)+'">'+pct(r.oi)+'</td><td class="'+cls(r.dl)+'">'+nf(r.dl/1e6,2)+'</td><td>'+(r.ls!=null?(r.ls*100).toFixed(0)+'%':'—')+'</td><td>'+r.r+'</td></tr>').join('')}
+$('#logNow').onclick=()=>logRow(false);
+$('#clearLog').onclick=()=>{if($('#clearLog').dataset.ask){S.log=[];localStorage.setItem('om.log','[]');renderLog();$('#clearLog').textContent='Καθαρισμός';delete $('#clearLog').dataset.ask}else{$('#clearLog').dataset.ask='1';$('#clearLog').textContent='Σίγουρα; πάτα ξανά'}};
+$('#copyCsv').onclick=async()=>{const csv=['Ημ/νία;Άνοιγμα;Σύμβολο;Τιμή αν.;Τιμή +30;High;Low;OI Δ%;Delta;Long%;Ανάγνωση'].concat(S.log.map(r=>[r.d,r.s,r.sym,r.o,r.p,r.h,r.l,r.oi==null?'':r.oi.toFixed(2),Math.round(r.dl),r.ls==null?'':(r.ls*100).toFixed(1),r.r].join(';'))).join('\n');try{await navigator.clipboard.writeText(csv);$('#copyCsv').textContent='Αντιγράφηκε';setTimeout(()=>$('#copyCsv').textContent='Αντιγραφή CSV',1500)}catch(e){prompt('Αντέγραψε:',csv)}};
+
+// ---------- loop
+let busy=false,pend=false;
+async function tick(force){if(busy){if(force)pend=true;return}busy=true;$('#err').textContent='';try{await fetchAll();render();const st=stats();if(st&&!S.data.live&&S.data.win>0&&st.mins>=30&&st.mins<=33)logRow(true)}catch(e){$('#err').textContent='Σφάλμα: '+e.message}busy=false;if(pend){pend=false;tick(true)}}
+tick(true);setInterval(()=>tick(false),10000);
+window.addEventListener('resize',()=>render());
+})();
+</script>
+</body>
+</html>
