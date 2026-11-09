@@ -98,12 +98,12 @@ th{color:var(--muted);font-weight:500}
   <div class="tablewrap"><table id="mkT"><thead><tr><th>Παράθ.</th><th>Φάση</th><th>Τιμή</th><th>OI $</th><th>↑ τιμή</th><th>↑ OI</th></tr></thead><tbody></tbody></table></div>
   <div class="grid" style="margin-top:8px">
     <div><h2>Ποιος φορτώνει (BTC · ETH · SOL)</h2><div class="kv" id="mkWho"></div></div>
-    <div><h2>Συνολική αγορά (CoinGecko)</h2><div class="kv" id="mkTot"></div></div>
+    <div><h2>Συνολική αγορά (CoinGecko, top 250)</h2><div class="kv" id="mkTot"></div></div>
     <div><h2>Μόχλευση & ροή</h2><div class="kv" id="mkLev"></div></div>
   </div>
   <h2 style="margin-top:14px">Αλλαγές ένδειξης (καταγράφονται για μέτρηση)</h2>
   <div class="tablewrap"><table id="mkLog"><thead><tr><th>Ημ/νία</th><th>Ώρα</th><th>Ένδειξη</th><th>BTC τότε</th><th>+4ω</th><th>+24ω</th></tr></thead><tbody></tbody></table></div>
-  <div class="row" style="margin-top:6px"><button id="mkCopy">Αντιγραφή CSV ενδείξεων</button><span class="note">Καλάθι: BTC, ETH, SOL, XRP, BNB, DOGE, ADA, AVAX, LINK, SUI, LTC, HYPE (Binance USDT-M). Τιμή = μεταβολή σταθμισμένη με το OI σε $. Λιανική = % λογαριασμών long· Μεγάλοι = top traders (θέσεις). Ποσοστημόριο = θέση στις τελευταίες ~21 μέρες (ωριαία). TOTAL2/TOTAL3/USDT.D 24ω: εκτίμηση από CoinGecko + Binance. Ανανέωση κάθε 60". Ένδειξη, όχι σήμα — μετράμε στο log αν βγαίνει σωστή.</span></div>
+  <div class="row" style="margin-top:6px"><button id="mkCopy">Αντιγραφή CSV ενδείξεων</button><span class="note">Καλάθι: BTC, ETH, SOL, XRP, BNB, DOGE, ADA, AVAX, LINK, SUI, LTC, HYPE (Binance USDT-M). Τιμή = μεταβολή σταθμισμένη με το OI σε $. Λιανική = % λογαριασμών long· Μεγάλοι = top traders (θέσεις). Ποσοστημόριο = θέση στις τελευταίες ~21 μέρες (ωριαία). TOTAL/TOTAL2/TOTAL3/dominance: top 250 νομίσματα του CoinGecko (~95% της αγοράς), μεταβολή 24ω από τα ίδια δεδομένα. Ανανέωση κάθε 60". Ένδειξη, όχι σήμα — μετράμε στο log αν βγαίνει σωστή.</span></div>
 </div>
 
 <div class="grid">
@@ -161,7 +161,7 @@ th{color:var(--muted);font-weight:500}
 
 <div class="note">Δεδομένα: Binance USDT-M futures (fapi), ανανέωση κάθε 10"· delta = 2·takerBuyQuote − quoteVolume ανά 1λ κερί· OI ιστορικό ανά 5λ. Χρυσός = XAUUSDT (όχι OANDA). Εργαλείο ανάγνωσης, όχι σημάτων.</div>
 <footer style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px">
-  <div style="color:var(--ink);font-weight:600">Trading Gym · Παρακολούθηση Ανοίγματος v1.6</div>
+  <div style="color:var(--ink);font-weight:600">Trading Gym · Παρακολούθηση Ανοίγματος v1.6.1</div>
   <div>Ζωντανή ανάγνωση του ανοίγματος για XAU, BTC, ETH, SOL και XRP: εύρος 5/15/30', open interest σε φάσεις (κάλυψη shorts / νέα shorts / νέα longs / καθάρισμα), delta, θέσεις λογαριασμών και σαρώσεις επιπέδων. Νέο v1.6: «Εικόνα αγοράς crypto» — φορτώνει/ξεφορτώνει σε 1/4/24 ώρες, λιανική vs μεγάλοι, TOTAL/TOTAL2/TOTAL3/stablecoins, με καταγραφή για μέτρηση. Για κίνηση γύρω από είδηση διάβασε το «LIVE 30'» — η «Ημέρα» ομαδοποιεί ανά ώρα.</div>
   <div style="margin-top:6px;color:var(--warn)">Εκπαιδευτικό υλικό — όχι επενδυτική συμβουλή.</div>
 </footer>
@@ -392,7 +392,7 @@ async function mkFetch(){
     return {s,oiv:oih.map(x=>+x.sumOpenInterestValue),oit:oih.map(x=>x.timestamp),c:kl.map(x=>+x[4]),kt:kl.map(x=>x[0])};
   }));
   const who=await Promise.all(MK3.map(async s=>{const [a,t]=await Promise.all([gS(`/futures/data/globalLongShortAccountRatio?symbol=${s}&period=1h&limit=500`),gS(`/futures/data/topLongShortPositionRatio?symbol=${s}&period=1h&limit=500`)]);return {s,a:(a||[]).map(x=>+x.longAccount),t:(t||[]).map(x=>+x.longAccount)}}));
-  const [prem,tk,cg]=await Promise.all([gS('/fapi/v1/premiumIndex'),gS('/futures/data/takerlongshortRatio?symbol=BTCUSDT&period=5m&limit=12'),fetch('https://api.coingecko.com/api/v3/global').then(r=>r.ok?r.json():null).catch(()=>null)]);
+  const [prem,tk,cg]=await Promise.all([gS('/fapi/v1/premiumIndex'),gS('/futures/data/takerlongshortRatio?symbol=BTCUSDT&period=5m&limit=12'),fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1').then(r=>r.ok?r.json():null).catch(()=>null)]);
   return {per:per.filter(Boolean),who,prem,tk,cg,at:Date.now()};
 }
 function mkCompute(M){
@@ -412,11 +412,10 @@ function mkCompute(M){
   const fund=fs?fw/fs*100:null;
   const tk=M.tk?M.tk.map(x=>+x.buySellRatio):[];const tkAvg=tk.length?tk.reduce((a,b)=>a+b,0)/tk.length:null;
   // συνολική αγορά
-  let tot=null;if(M.cg&&M.cg.data){const d=M.cg.data,T=d.total_market_cap.usd,cT=d.market_cap_change_percentage_24h_usd/100,pc=d.market_cap_percentage;
-    const px24=s=>{const x=M.per.find(y=>y.s===s);if(!x||x.c.length<289)return 0;return x.c.at(-1)/x.c.at(-289)-1};
-    const B=T*pc.btc/100,E=T*pc.eth/100,cB=px24('BTCUSDT'),cE=px24('ETHUSDT');const T0=T/(1+cT),B0=B/(1+cB),E0=E/(1+cE);
-    const T2=T-B,T2o=T0-B0,T3=T-B-E,T3o=T0-B0-E0;const stab=(pc.usdt||0)+(pc.usdc||0);const stab0=stab*(1+cT); // σταθερά stablecoins σε 24ω
-    tot={T,cT:cT*100,T2,c2:(T2/T2o-1)*100,T3,c3:(T3/T3o-1)*100,btcd:pc.btc,usdt:pc.usdt,stab,dStab:stab-stab0}}
+  let tot=null;if(Array.isArray(M.cg)&&M.cg.length>50){let T=0,T0=0,B=0,B0=0,E=0,E0=0,U=0,U0=0,S=0,S0=0;
+    M.cg.forEach(c=>{const m=+c.market_cap||0,d=+c.market_cap_change_24h||0,m0=m-d;T+=m;T0+=m0;if(c.id==='bitcoin'){B=m;B0=m0}if(c.id==='ethereum'){E=m;E0=m0}if(c.id==='tether'){U=m;U0=m0}if(c.id==='tether'||c.id==='usd-coin'){S+=m;S0+=m0}});
+    const ch=(a,b)=>b?(a/b-1)*100:0;const stab=S/T*100,stab0=S0/T0*100;
+    tot={T,cT:ch(T,T0),T2:T-B,c2:ch(T-B,T0-B0),T3:T-B-E,c3:ch(T-B-E,T0-B0-E0),btcd:B/T*100,usdt:U/T*100,stab,dStab:stab-stab0}}
   // ετυμηγορία
   const r1=rows[0],r4=rows[1],r24=rows[2];let k='flat',t='ΟΥΔΕΤΕΡΟ',why=[];
   const crowdL=retail.p>=80, risky=(r4.ph[1].startsWith('ΦΟΡΤΩΝΕΙ ΣΤΗΝ')||r24.ph[1].startsWith('ΦΟΡΤΩΝΕΙ ΣΤΗΝ'));
