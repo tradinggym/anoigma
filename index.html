@@ -103,7 +103,7 @@ th{color:var(--muted);font-weight:500}
   </div>
   <h2 style="margin-top:14px">Αλλαγές ένδειξης (καταγράφονται για μέτρηση)</h2>
   <div class="tablewrap"><table id="mkLog"><thead><tr><th>Ημ/νία</th><th>Ώρα</th><th>Ένδειξη</th><th>BTC τότε</th><th>+4ω</th><th>+24ω</th></tr></thead><tbody></tbody></table></div>
-  <div class="row" style="margin-top:6px"><button id="mkCopy">Αντιγραφή CSV ενδείξεων</button><span class="note">Καλάθι: BTC, ETH, SOL, XRP, BNB, DOGE, ADA, AVAX, LINK, SUI, LTC, HYPE (Binance USDT-M). Τιμή = μεταβολή σταθμισμένη με το OI σε $. Λιανική = % λογαριασμών long· Μεγάλοι = top traders (θέσεις). Ποσοστημόριο = θέση στις τελευταίες ~21 μέρες (ωριαία). TOTAL/TOTAL2/TOTAL3/dominance: top 250 νομίσματα του CoinGecko (~95% της αγοράς), μεταβολή 24ω από τα ίδια δεδομένα. Ανανέωση κάθε 60". Ένδειξη, όχι σήμα — μετράμε στο log αν βγαίνει σωστή.</span></div>
+  <div class="row" style="margin-top:6px"><button id="mkCopy">Αντιγραφή CSV ενδείξεων</button><span class="note">Καλάθι: BTC, ETH, SOL, XRP, BNB, DOGE, ADA, AVAX, LINK, SUI, LTC, HYPE (Binance USDT-M). Τιμή = μεταβολή σταθμισμένη με το OI σε $. Λιανική = % λογαριασμών long· Μεγάλοι = top traders (θέσεις). Ποσοστημόριο = θέση στις τελευταίες ~21 μέρες (ωριαία). TOTAL/TOTAL2/TOTAL3/dominance: top 250 νομίσματα του CoinGecko (~95% της αγοράς), μεταβολή 24ω από τα ίδια δεδομένα. Ανανέωση κάθε 60". Ένδειξη, όχι σήμα — μετράμε στο log αν βγαίνει σωστή. Ενδείξεις ⚡ = δοκιμαστικές: 1ω που κράτησε 15', χωρίς επιβεβαίωση 4ω. Προειδοποίηση ανόδου = θέσεις χτίζονται και οι shorts είναι φορτωμένοι (λιανική long ≤20ο pct ή funding αρνητικό).</span></div>
 </div>
 
 <div class="grid">
@@ -161,7 +161,7 @@ th{color:var(--muted);font-weight:500}
 
 <div class="note">Δεδομένα: Binance USDT-M futures (fapi), ανανέωση κάθε 10"· delta = 2·takerBuyQuote − quoteVolume ανά 1λ κερί· OI ιστορικό ανά 5λ. Χρυσός = XAUUSDT (όχι OANDA). Εργαλείο ανάγνωσης, όχι σημάτων.</div>
 <footer style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px">
-  <div style="color:var(--ink);font-weight:600">Trading Gym · Παρακολούθηση Ανοίγματος v1.6.1</div>
+  <div style="color:var(--ink);font-weight:600">Trading Gym · Παρακολούθηση Ανοίγματος v1.7</div>
   <div>Ζωντανή ανάγνωση του ανοίγματος για XAU, BTC, ETH, SOL και XRP: εύρος 5/15/30', open interest σε φάσεις (κάλυψη shorts / νέα shorts / νέα longs / καθάρισμα), delta, θέσεις λογαριασμών και σαρώσεις επιπέδων. Νέο v1.6: «Εικόνα αγοράς crypto» — φορτώνει/ξεφορτώνει σε 1/4/24 ώρες, λιανική vs μεγάλοι, TOTAL/TOTAL2/TOTAL3/stablecoins, με καταγραφή για μέτρηση. Για κίνηση γύρω από είδηση διάβασε το «LIVE 30'» — η «Ημέρα» ομαδοποιεί ανά ώρα.</div>
   <div style="margin-top:6px;color:var(--warn)">Εκπαιδευτικό υλικό — όχι επενδυτική συμβουλή.</div>
 </footer>
@@ -396,13 +396,15 @@ async function mkFetch(){
   return {per:per.filter(Boolean),who,prem,tk,cg,at:Date.now()};
 }
 function mkCompute(M){
-  const rows=MKW.map(([name,n,tp,to])=>{
-    let oiNow=0,oiThen=0,wsum=0,pw=0,up=0,oiUp=0,cnt=0;
-    M.per.forEach(x=>{const L=x.oiv.length-1,K=x.c.length-1;if(L-n<0||K-n<0)return;const o1=x.oiv[L],o0=x.oiv[L-n],c1=x.c[K],c0=x.c[K-n];
-      oiNow+=o1;oiThen+=o0;const pc=(c1-c0)/c0*100;pw+=pc*o1;wsum+=o1;cnt++;if(pc>0)up++;if(o1>o0)oiUp++;});
-    const p=wsum?pw/wsum:0,oi=oiThen?(oiNow-oiThen)/oiThen*100:0;const ph=mkPhase(p,oi,tp,to);
-    return {name,n,p,oi,up,oiUp,cnt,ph,oiNow};
-  });
+  const win=(n,off,tp,to)=>{let oiNow=0,oiThen=0,wsum=0,pw=0,up=0,dn=0,oiUp=0,cnt=0;
+    M.per.forEach(x=>{const L=x.oiv.length-1-off,K=x.c.length-1-off;if(L-n<0||K-n<0)return;const o1=x.oiv[L],o0=x.oiv[L-n],c1=x.c[K],c0=x.c[K-n];
+      oiNow+=o1;oiThen+=o0;const pc=(c1-c0)/c0*100;pw+=pc*o1;wsum+=o1;cnt++;if(pc>0)up++;if(pc<0)dn++;if(o1>o0)oiUp++;});
+    const p=wsum?pw/wsum:0,oi=oiThen?(oiNow-oiThen)/oiThen*100:0;return {p,oi,up,dn,oiUp,cnt,oiNow,ph:mkPhase(p,oi,tp,to)}};
+  const rows=MKW.map(([name,n,tp,to])=>Object.assign({name,n},win(n,0,tp,to)));
+  // πρώιμο σήμα (δοκιμαστικό): η φάση 1ω πρέπει να κρατήσει 3 συνεχόμενες μετρήσεις 5' (≈15')
+  const e3=[0,1,2].map(o=>win(12,o,0.3,0.3));let early=null;
+  if(e3.every(w=>w.ph[1]==='ΦΟΡΤΩΝΕΙ LONGS'&&w.up>=10)&&rows[1].ph[1]!=='ΦΟΡΤΩΝΕΙ LONGS')early={d:'up',t:'⚡ ΠΡΩΙΜΟ ΣΗΜΑ ΑΝΟΔΟΥ',x:'νέα longs σε '+e3[0].up+'/'+e3[0].cnt+' για 15\' στο 1ω'};
+  else if(e3.every(w=>w.ph[1]==='ΦΟΡΤΩΝΕΙ ΣΤΗΝ ΠΤΩΣΗ'&&w.dn>=10)&&rows[1].ph[1]!=='ΦΟΡΤΩΝΕΙ ΣΤΗΝ ΠΤΩΣΗ')early={d:'dn',t:'⚡ ΠΡΩΙΜΟ ΣΗΜΑ ΠΤΩΣΗΣ',x:'νέες θέσεις στην πτώση σε '+e3[0].dn+'/'+e3[0].cnt+' για 15\' στο 1ω'};
   // ποιος φορτώνει: μεταβολή % λογαριασμών long (λιανική) και top traders (μεγάλοι) σε 4ω και 24ω
   const W={};M.who.forEach(w=>{if(w.a.length<25)return;W[w.s]={a:w.a.at(-1),a4:w.a.at(-1)-w.a.at(-5),a24:w.a.at(-1)-w.a.at(-25),ap:pctile(w.a,w.a.at(-1)),t:w.t.at(-1),t4:w.t.length>5?w.t.at(-1)-w.t.at(-5):0,t24:w.t.length>25?w.t.at(-1)-w.t.at(-25):0,tp:pctile(w.t,w.t.at(-1))}});
   const ks=Object.keys(W);const avg=f=>ks.length?ks.reduce((a,k)=>a+W[k][f],0)/ks.length:0;
@@ -419,7 +421,9 @@ function mkCompute(M){
   // ετυμηγορία
   const r1=rows[0],r4=rows[1],r24=rows[2];let k='flat',t='ΟΥΔΕΤΕΡΟ',why=[];
   const crowdL=retail.p>=80, risky=(r4.ph[1].startsWith('ΦΟΡΤΩΝΕΙ ΣΤΗΝ')||r24.ph[1].startsWith('ΦΟΡΤΩΝΕΙ ΣΤΗΝ'));
-  if(risky&&crowdL){k='new';t='⚠️ ΠΡΟΕΙΔΟΠΟΙΗΣΗ ΠΤΩΣΗΣ';why.push('νέες θέσεις στην πτώση και λιανική long στο '+Math.round(retail.p)+'ο ποσοστημόριο — αν σπάσει στήριξη, ρίσκο ντόμινο')}
+  const crowdS=retail.p<=20||(fund!=null&&fund<0), building=[r4,r24].some(r=>r.ph[1].startsWith('ΦΟΡΤΩΝΕΙ ΣΤΗΝ')||r.ph[1]==='ΦΟΡΤΩΝΕΙ (τιμή επίπεδη)');
+  if(!crowdL&&crowdS&&building){k='healthy';t='⚠️ ΠΡΟΕΙΔΟΠΟΙΗΣΗ ΑΝΟΔΟΥ (short squeeze)';why.push('ανοίγουν θέσεις ενώ η τιμή δεν ανεβαίνει και οι shorts είναι φορτωμένοι ('+(retail.p<=20?'λιανική long στο '+Math.round(retail.p)+'ο pct':'')+(fund!=null&&fund<0?(retail.p<=20?', ':'')+'funding αρνητικό '+fund.toFixed(4)+'%':'')+') — αν σπάσει αντίσταση, κλείνουν με ορμή προς τα πάνω')}
+  else if(risky&&crowdL){k='new';t='⚠️ ΠΡΟΕΙΔΟΠΟΙΗΣΗ ΠΤΩΣΗΣ';why.push('νέες θέσεις στην πτώση και λιανική long στο '+Math.round(retail.p)+'ο ποσοστημόριο — αν σπάσει στήριξη, ρίσκο ντόμινο')}
   else if((r4.ph[0]==='flush')&&r4.oi<=-2&&(fund==null||fund<=0.005)){k='flush';t='ΠΙΘΑΝΟΣ ΠΑΤΟΣ / ΚΑΘΑΡΙΣΜΑ';why.push('OI '+r4.oi.toFixed(1)+'% σε 4ω με την τιμή κάτω και ουδέτερο funding — η μόχλευση βγαίνει· θέλει ανάκτηση για επιβεβαίωση')}
   else if(r4.ph[1]==='ΦΟΡΤΩΝΕΙ LONGS'){const healthy=(fund==null||fund<0.02)&&big.d4>0&&!(tot&&tot.dStab>0.15);k=healthy?'healthy':'new';t=healthy?'ΥΓΙΗΣ ΑΝΟΔΟΣ':'ΕΥΘΡΑΥΣΤΗ ΑΝΟΔΟΣ';why.push(healthy?'νέα longs με τους μεγάλους μαζί και funding λογικό':'νέα longs '+(big.d4<=0?'χωρίς τους μεγάλους':'')+(fund>=0.02?' με ψηλό funding':'')+(tot&&tot.dStab>0.15?' ενώ τα stablecoins κερδίζουν μερίδιο':''))}
   else if(r4.ph[0]==='cover'){k='cover';t='ΑΝΟΔΟΣ ΚΑΛΥΨΗΣ';why.push('η άνοδος έρχεται από κλείσιμο shorts, όχι νέο χρήμα — συχνά βραχύβια')}
@@ -432,12 +436,12 @@ function mkCompute(M){
   if(retail.d4>0.01&&big.d4<-0.005)why.push('η λιανική φορτώνει long ενώ οι μεγάλοι μειώνουν');
   if(big.d4>0.01&&retail.d4<0)why.push('οι μεγάλοι φορτώνουν long ενώ η λιανική βγαίνει');
   if(tot&&tot.dStab>0.15)why.push('stablecoins +'+tot.dStab.toFixed(2)+' μον. μερίδιο 24ω (risk-off)');
-  return {rows,retail,big,W,fund,tkAvg,tot,k,t,why};
+  return {rows,retail,big,W,fund,tkAvg,tot,k,t,why,early};
 }
 const bn=v=>v>=1e12?(v/1e12).toFixed(2)+' τρισ.':(v/1e9).toFixed(1)+' δισ.';
 function mkRender(M,R){
   $('#mkAt').textContent='· '+fmt(new Date(M.at),'Europe/Athens',{hour:'2-digit',minute:'2-digit',hour12:false});
-  $('#mkV').innerHTML='<span class="tag '+R.k+'">'+R.t+'</span><span>'+R.why.join(' · ')+'</span>';
+  $('#mkV').innerHTML='<span class="tag '+R.k+'">'+R.t+'</span><span>'+R.why.join(' · ')+'</span>'+(R.early?'<div class="muted" style="margin-top:6px;font-size:12.5px">'+R.early.t+' <span style="font:600 10px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px">ΔΟΚΙΜΑΣΤΙΚΟ</span> · '+R.early.x+' · πρώιμο, χωρίς επιβεβαίωση 4ω — δεν αλλάζει την κύρια ένδειξη</div>':'');
   $('#mkT tbody').innerHTML=R.rows.map(r=>'<tr><td>'+r.name+'</td><td><span class="tag '+r.ph[0]+'" style="font:600 10px var(--mono);padding:2px 6px;border-radius:4px">'+r.ph[1]+'</span></td><td class="'+cls(r.p)+'">'+sgn(r.p)+'%</td><td class="'+cls(r.oi)+'">'+sgn(r.oi)+'%</td><td>'+r.up+'/'+r.cnt+'</td><td>'+r.oiUp+'/'+r.cnt+'</td></tr>').join('');
   const lr=(o)=>(o.lvl*100).toFixed(1)+'% · '+Math.round(o.p)+'ο pct';
   $('#mkWho').innerHTML=[['Λιανική long',lr(R.retail)],['  μεταβολή 4ω / 24ω',sgn(R.retail.d4*100,1)+' / '+sgn(R.retail.d24*100,1)+' μον.'],['Μεγάλοι long',lr(R.big)],['  μεταβολή 4ω / 24ω',sgn(R.big.d4*100,1)+' / '+sgn(R.big.d24*100,1)+' μον.']].concat(Object.keys(R.W).map(s=>[s.replace('USDT',''),(R.W[s].a*100).toFixed(1)+'% / '+(R.W[s].t*100).toFixed(1)+'%'])).map(x=>'<div>'+x[0]+'</div><div>'+x[1]+'</div>').join('');
@@ -445,7 +449,8 @@ function mkRender(M,R){
   $('#mkLev').innerHTML=[['Συνολικό OI καλαθιού',bn(R.rows[0].oiNow)],['Funding (σταθμ. με OI)',R.fund==null?'—':R.fund.toFixed(4)+'%'+(R.fund>=0.02?' <span class="down">ψηλό</span>':R.fund<0?' <span class="up">αρνητικό</span>':'')],['BTC taker buy/sell 1ω',R.tkAvg==null?'—':R.tkAvg.toFixed(2)+(R.tkAvg>1.05?' αγοραστές':R.tkAvg<0.95?' πωλητές':' ισορροπία')]].map(x=>'<div>'+x[0]+'</div><div>'+x[1]+'</div>').join('');
   // log αλλαγών ένδειξης + βαθμολόγηση με τιμή BTC
   const btc=M.per.find(x=>x.s==='BTCUSDT');const px=btc?btc.c.at(-1):null;
-  if(px&&(!MKL.length||MKL[0].t!==R.t)){MKL.unshift({ts:M.at,t:R.t,px});MKL=MKL.slice(0,300)}
+  if(px&&(!MKL.length||MKL.find(e=>!e.e)?.t!==R.t)){MKL.unshift({ts:M.at,t:R.t,px});MKL=MKL.slice(0,300)}
+  const le=localStorage.getItem('om.mk.early')||'';const ce=R.early?R.early.t:'';if(px&&ce&&ce!==le){MKL.unshift({ts:M.at,t:ce+' (δοκιμ.)',px,e:1});MKL=MKL.slice(0,300)}localStorage.setItem('om.mk.early',ce);
   if(btc)MKL.forEach(e=>{[['p4',4*3600000],['p24',24*3600000]].forEach(([f,dt])=>{if(e[f]==null&&M.at>=e.ts+dt){const i=btc.kt.findIndex(t=>t>=e.ts+dt);if(i>=0)e[f]=btc.c[i]}})});
   localStorage.setItem('om.mk.log',JSON.stringify(MKL));
   const chg=(e,p)=>p==null?'—':'<span class="'+cls(p-e.px)+'">'+sgn((p-e.px)/e.px*100)+'%</span>';
